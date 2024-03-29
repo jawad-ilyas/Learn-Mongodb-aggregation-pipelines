@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { loginUser, logout, registerUser } from "../contollers/User.contollers.js"
+import { loginUser, logout, refreshAccessToken, registerUser } from "../contollers/User.contollers.js"
 import { upload } from "../middlerwares/multer.middlerwares.js"
 import { verifyJwt } from "../middlerwares/auth.middlewavers.js";
 const router = Router();
@@ -18,7 +18,8 @@ router.route("/register").post(upload.fields(
 // ! Routes For the Login User
 router.route("/login").post(loginUser)
 
-// ! Routes For the Log out 
+// ! Routes For the Log out + Secured Route
 router.route("/logout").post( verifyJwt,logout)
+router.route("/refreshToken").post( refreshAccessToken)
 
 export default router;

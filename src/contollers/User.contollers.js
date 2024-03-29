@@ -4,7 +4,7 @@ import { ApiError } from "../utilis/ApiError.js"
 import { asyncHandler } from "../utilis/asyncHandler.utilis.js"
 import { uploadCloudinary } from "../utilis/cloudinary.js";
 import { ApiResponse } from "../utilis/ApResponse.js";
-
+import jwt from "jsonwebtoken"
 // ! Create Tokens Generater
 const accessAndRefreshTokenGenerater = async (userId) => {
     try {
@@ -211,7 +211,7 @@ const logout = asyncHandler(async (req, res) => {
 
     await User.findByIdAndUpdate(req.user._id, {
         $set: {
-            refreshToken: undefined
+            refreshToken: 1
         }
     },
         {
@@ -229,5 +229,46 @@ const logout = asyncHandler(async (req, res) => {
         new ApiResponse(200, " User Is Logout Successfully")
     )
 })
-export { registerUser, loginUser, logout };
+
+// ! Refresh Token 
+const refreshAccessToken = asyncHandler(async (req, res) => {
+
+    const incommingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
+    console.log(incommingRefreshToken)
+    if (!incommingRefreshToken) {
+        throw new ApiError(401, "Refresh Token is InValid")
+    }
+
+    try {
+        const decodeToken = jwt.verify(incommingRefreshToken, process.env.REFRESH_TOKEN_SECRET);
+        const user = await User.findById(decodeToken?._id)
+        // console.log("User ",user)
+        // console.log("decoedeToken : ", decodeToken)
+        if (!user) {
+            throw new ApiError(401, "unauthorized Token")
+        }
+        // console.log("user?.refreshToken", user?.refreshToken);
+        if (incommingRefreshToken !== user?.refreshToken) {
+            throw new ApiError(401, "Refresh Token is expired or used")
+        }
+
+        const { accessToken, refreshToken } = await accessAndRefreshTokenGenerater(user._id)
+
+        const options = {
+            httpOnly: true,
+            secure: true
+        }
+
+        res.cookie("refreshToken", refreshToken, options)
+        res.cookie("accessToken", accessToken, options)
+        res.status(200).json(
+            new ApiResponse(200, "Again Tokens Generated", {
+                accessToken, refreshToken
+            })
+        )
+    } catch (error) {
+        console.log("error into refresh token ", error)
+    }
+})
+export { registerUser, loginUser, logout, refreshAccessToken };
 

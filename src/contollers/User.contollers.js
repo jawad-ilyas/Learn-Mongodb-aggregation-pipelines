@@ -5,6 +5,7 @@ import { asyncHandler } from "../utilis/asyncHandler.utilis.js"
 import { uploadCloudinary } from "../utilis/cloudinary.js";
 import { ApiResponse } from "../utilis/ApResponse.js";
 import jwt from "jsonwebtoken"
+import { upload } from "../middlerwares/multer.middlerwares.js";
 // ! Create Tokens Generater
 const accessAndRefreshTokenGenerater = async (userId) => {
     try {
@@ -41,6 +42,16 @@ const isValidate = (fields) => {
             case "password":
                 if (!fields.password || fields.password.length < 8) {
                     errors.password = "Password must be at least 8 characters long";
+                }
+                break;
+            case "oldPassword":
+                if (!fields.oldPassword || fields.oldPassword.length < 8) {
+                    errors.oldPassword = "Password must be at least 8 characters long";
+                }
+                break;
+            case "newPassword":
+                if (!fields.newPassword || fields.newPassword.length < 8) {
+                    errors.newPassword = "Password must be at least 8 characters long";
                 }
                 break;
             case "email":
@@ -270,5 +281,205 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         console.log("error into refresh token ", error)
     }
 })
-export { registerUser, loginUser, logout, refreshAccessToken };
+
+// ! Change Password Controller
+const changeCurrentPassword = asyncHandler(async (req, res) => {
+
+    // * Step 1 : get data from the user 
+    // * Step 2 : Validate the Data 
+    // * Step 3 : Check User exists or not 
+    // * Step 3 : match the password 
+    // * Step 4 : update the password 
+
+
+    // ? Step 1 : get data from the user 
+    const { email, newPassword, userName, oldPassword } = req.body
+    // console.log("email : ", email);
+    // console.log("oldPassword : ", oldPassword);
+    // console.log("userName : ", userName);
+    // console.log("req.body", req.body)
+
+
+    // ? Step 2 : Validate the Data 
+    const validateFields = isValidate(req.body)
+    // console.log("validateFields", validateFields)
+    if (Object.keys(validateFields).length > 0) {
+        throw new ApiError(400, "All Fields Are required", validateFields)
+    }
+
+    // ? Step 3 : Check User Exists or not 
+
+    const user = await User.findOne(
+        { $or: [{ email }, { userName }] }
+    )
+    // console.log("User into Password Reset : ", user)
+
+    if (!user) {
+        throw new ApiError(400, "Unathurized User Request")
+    }
+
+
+    // ? Step 4: Check Password Match or Not
+    const validatePassword = await user.isPasswordCorrect(oldPassword);
+    console.log("validatePassword into reset Password : ", validatePassword)
+
+
+    if (!validatePassword) {
+        throw new ApiError(400, "Unathurized User Request For password")
+    }
+    // console.log("User into Password Reset : ", user.password)
+
+    user.password = newPassword;
+    await user.save({ validateBeforeSave: false })
+    // console.log(user.password)
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, "Password is Changed"))
+
+})
+
+// ! Get Current User
+const getCurrentUser = asyncHandler(async (req, res) => {
+    // console.log("Get Current User Email:", req.user?.email); // Check email property
+    // console.log("Get Current User UserName:", req.user?.userName); // Check userName property
+    // console.log("Get Current User", req.user); // Log the entire user object for debugging
+    const { email, userName } = req.user;
+    // console.log("Email:", email);
+    // console.log("Username:", userName);
+
+    return res
+        .status(200)
+        .json(
+
+            new ApiResponse(200, "Current User Fetched Successfully ", JSON.stringify(await req.user))
+
+        );
+});
+
+// ! update Account Details 
+const updateAccountDetails = asyncHandler(async (req, res) => {
+
+    // * First Get Data From the user
+    // * Validate The Data From the user
+    // * Update the data into database
+
+
+    // ? Step 1 get data from the user
+    const { fullName, email, userName } = req.body;
+
+    // ? Validate the fields 
+    const validateFields = isValidate(req.body)
+
+    if (Object.keys(validateFields).length > 0) {
+        throw new ApiError(400, "All Feilds are required", validateFields)
+    }
+
+    // ? Step 3 Update The User 
+    // console.log(JSON.stringify(await req.user._id))
+    // console.log(await req.user)
+
+
+
+    const updateUser = await User.findByIdAndUpdate(await req.user._id, {
+        $set: {
+            fullName,
+            userName
+        }
+    }, {
+        new: true
+    }).select("-password ")
+    console.log("updateUser : ", updateUser)
+    if (!updateUser) {
+        throw new ApiError(500, "User is Not Updated Successfullly")
+    }
+
+    res
+        .status(200)
+        .json(
+            new ApiResponse(200, "User is Updated Succefully", updateUser)
+        )
+})
+
+
+// ! Update Avator Image For user
+const updateUserAvator = asyncHandler(async (req, res) => {
+
+    // ? get the local path of the avator files
+    // ! we use req.file there because we dont want to upload multiple files we upload single file so soo ------> req.file
+    const avatorLocalPath = req.file?.path;
+    // console.log("avatorLocalPath Update User Avatar Controller : ", avatorLocalPath)
+
+
+    if (!avatorLocalPath) {
+        throw new ApiError(400, "Avator is not Updated Succesfully")
+    }
+
+    // ? Step 2  - Upload this on to cloudinary 
+    const avatar = await uploadCloudinary(avatorLocalPath);
+
+    if (!avatar?.url) {
+        throw new Error(400, "Error While Uploading On Avator")
+    }
+
+
+    const updateAvatarFile = await User.findByIdAndUpdate(req.user._id,
+        {
+            $set: {
+                avatar: avatar?.url
+            }
+        },
+        {
+            new: true
+        }).select("-password")
+
+    // console.log("updateAvatarFile after updation User object : ", updateAvatarFile)
+
+    // console.log("avatar FIles Cloudinary link : ", avatar)
+    res
+        .status(200)
+        .json(new ApiResponse(200, "Cover Image Updated Succefully ", updateAvatarFile))
+})
+
+
+// ! Update Cover Image For User
+const updateUserCoverImage = asyncHandler(async (req, res) => {
+
+    // ? get the local path of the avator files
+    // ! we use req.file there because we dont want to upload multiple files we upload single file so soo ------> req.file
+    const coverImageLocalPath = req.file?.path;
+    // console.log("coverImageLocalPath Update User Avatar Controller : ", coverImageLocalPath)
+
+
+    if (!coverImageLocalPath) {
+        throw new ApiError(400, "coverImage is not Updated Succesfully")
+    }
+
+    // ? Step 2  - Upload this on to cloudinary 
+    const coverImage = await uploadCloudinary(coverImageLocalPath);
+
+    if (!coverImage?.url) {
+        throw new Error(400, "Error While Uploading On coverImage")
+    }
+
+
+    const updatecoverImageFile = await User.findByIdAndUpdate(req.user._id,
+        {
+            $set: {
+                coverImage: coverImage?.url
+            }
+        },
+        {
+            new: true
+        }).select("-password")
+
+    // console.log("updatecoverImageFile after updation User object : ", updatecoverImageFile)
+
+    // console.log("coverImage FIles Cloudinary link : ", coverImage)
+    res
+        .status(200)
+        .json(new ApiResponse(200, "Cover Image Updated Succefully ", updatecoverImageFile))
+})
+
+export { registerUser, loginUser, logout, refreshAccessToken, changeCurrentPassword, getCurrentUser, updateAccountDetails, updateUserAvator, updateUserCoverImage };
 

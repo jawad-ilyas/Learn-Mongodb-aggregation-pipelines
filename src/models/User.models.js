@@ -72,6 +72,7 @@ userSchema.methods.isPasswordCorrect = async function (password) {
     // console.log("password", password)
     // console.log("this .password", this.password)
     // ! Import thing simple password pass first then pass encrypt password
+
     return await bcrypt.compare(password, this.password)
 }
 

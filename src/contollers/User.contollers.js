@@ -415,6 +415,9 @@ const updateUserAvator = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Avator is not Updated Succesfully")
     }
 
+
+    // TODO : delete old iamge - assignment
+    
     // ? Step 2  - Upload this on to cloudinary 
     const avatar = await uploadCloudinary(avatorLocalPath);
 
